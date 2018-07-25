@@ -65,7 +65,7 @@ const templ = `{
     "ContentFieldNames": %s,
     "IdentifierList": {
       "@odata.type": "#ThomsonReuters.Dss.Api.Extractions.ExtractionRequests.InstrumentIdentifierList",
-      "InstrumentIdentifiers": %s,
+      "InstrumentIdentifiers": [%s],
       "ValidationOptions": null,
       "UseUserPreferencesForValidationOptions": false
     },
