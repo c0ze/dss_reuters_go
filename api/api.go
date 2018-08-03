@@ -84,7 +84,7 @@ func (er *ExtractRequest) toString() string {
 	return fmt.Sprintf(templ, er.RequestType, fields, identifiers)
 }
 
-func OnDemandExtract(isinCode string) {
+func OnDemandExtract(isinCode string) (string, string, []byte) {
 	extractURL := "/RestApi/v1/Extractions/ExtractWithNotes"
 
 	er := ExtractRequest{
@@ -125,6 +125,8 @@ func OnDemandExtract(isinCode string) {
 
 	fmt.Println("location: ", location)
 	fmt.Println("status: ", status)
+
+	return location, status, body
 }
 
 func GetAsyncResult(location string) []byte {
