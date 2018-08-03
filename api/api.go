@@ -32,9 +32,8 @@ func Init() {
 	loginUrl := "/RestApi/v1/Authentication/RequestToken"
 	fmt.Println("URL:>", loginUrl)
 
-	credentials := map[string]map[string]string{"Credentials": {"Username": dssUsername, "Password": dssPassword}} // }"username": username, "password": password}
+	credentials := map[string]map[string]string{"Credentials": {"Username": dssUsername, "Password": dssPassword}}
 	jsonCredentials, _ := json.Marshal(credentials)
-	//	loginBody := []byte(fmt.Sprintf(`{"Credentials": {"Username": "%s","Password": "%s"}}`, dssUsername, dssPassword))
 	fmt.Println("BODY:>", string(jsonCredentials))
 
 	req, err := http.NewRequest("POST", baseURI+loginUrl, bytes.NewBuffer(jsonCredentials))
@@ -86,8 +85,6 @@ func (er *ExtractRequest) toString() string {
 }
 
 func OnDemandExtract(isinCode string) {
-	// def initialize(session, fields, identifiers, type)
-
 	extractURL := "/RestApi/v1/Extractions/ExtractWithNotes"
 
 	er := ExtractRequest{
@@ -121,7 +118,32 @@ func OnDemandExtract(isinCode string) {
 	fmt.Println("response Status:", resp.Status)
 	fmt.Println("response Headers:", resp.Header)
 	body, _ := ioutil.ReadAll(resp.Body)
-
 	fmt.Println("response Body:", string(body))
 
+	location := resp.Header.Get("Location")
+	status := resp.Header.Get("Status")
+
+	fmt.Println("location: ", location)
+	fmt.Println("status: ", status)
+}
+
+func GetAsyncResult(location string) []byte {
+	req, err := http.NewRequest("GET", location, bytes.NewBuffer([]byte("")))
+	req.Header.Set("Prefer", "respond-async; wait=5")
+	req.Header.Set("Content-Type", "application/json; odata=minimalmetadata")
+	req.Header.Set("Authorization", fmt.Sprintf("Token %s", loginResp.Token))
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	fmt.Println("response Status:", resp.Status)
+	fmt.Println("response Headers:", resp.Header)
+	body, _ := ioutil.ReadAll(resp.Body)
+	fmt.Println("response Body:", string(body))
+
+	return body
 }
