@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -27,14 +28,14 @@ func Init() {
 	dssPassword := os.Getenv("DSS_PASSWORD")
 	baseURI = "https://hosted.datascopeapi.reuters.com"
 
-	fmt.Println(dssUsername, dssPassword)
+	log.Debug("credentials: ", dssUsername, dssPassword)
 
 	loginUrl := "/RestApi/v1/Authentication/RequestToken"
-	fmt.Println("URL:>", loginUrl)
+	log.Debug("URL:>", loginUrl)
 
 	credentials := map[string]map[string]string{"Credentials": {"Username": dssUsername, "Password": dssPassword}}
 	jsonCredentials, _ := json.Marshal(credentials)
-	fmt.Println("BODY:>", string(jsonCredentials))
+	log.Debug("BODY:>", string(jsonCredentials))
 
 	req, err := http.NewRequest("POST", baseURI+loginUrl, bytes.NewBuffer(jsonCredentials))
 	req.Header.Set("Prefer", "respond-async")
@@ -47,15 +48,15 @@ func Init() {
 	}
 	defer resp.Body.Close()
 
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Headers:", resp.Header)
+	log.Debug("login response: status ", resp.Status)
+	log.Debug("login response Headers:", resp.Header)
 	body, _ := ioutil.ReadAll(resp.Body)
 
 	err = json.Unmarshal(body, &loginResp)
 	if err != nil {
-		fmt.Println("whoops:", err)
+		log.Debug("whoops:", err)
 	}
-	fmt.Println("Token:", loginResp.Token)
+	log.Debug("Token:", loginResp.Token)
 }
 
 const templ = `{
@@ -102,7 +103,7 @@ func OnDemandExtract(isinCode string) (string, string, []byte) {
 			"Identifier":     isinCode,
 			"IdentifierType": "Isin"}}
 
-	fmt.Println("request Body:", er.toString())
+	log.Debug("request Body:", er.toString())
 	req, err := http.NewRequest("POST", baseURI+extractURL, bytes.NewBuffer([]byte(er.toString())))
 	req.Header.Set("Prefer", "respond-async; wait=5")
 	req.Header.Set("Content-Type", "application/json; odata=minimalmetadata")
@@ -115,16 +116,16 @@ func OnDemandExtract(isinCode string) (string, string, []byte) {
 	}
 	defer resp.Body.Close()
 
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Headers:", resp.Header)
+	log.Debug("response Status:", resp.Status)
+	log.Debug("response Headers:", resp.Header)
 	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Body:", string(body))
+	log.Debug("response Body:", string(body))
 
 	location := resp.Header.Get("Location")
 	status := resp.Header.Get("Status")
 
-	fmt.Println("location: ", location)
-	fmt.Println("status: ", status)
+	log.Debug("location: ", location)
+	log.Debug("status: ", status)
 
 	return location, status, body
 }
@@ -142,10 +143,10 @@ func GetAsyncResult(location string) []byte {
 	}
 	defer resp.Body.Close()
 
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Headers:", resp.Header)
+	log.Debug("response Status:", resp.Status)
+	log.Debug("response Headers:", resp.Header)
 	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Body:", string(body))
+	log.Debug("response Body:", string(body))
 
 	return body
 }
