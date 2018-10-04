@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	_ "github.com/joho/godotenv/autoload"
+	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
 	"os"
-	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -69,7 +69,7 @@ const templ = `{
       "ValidationOptions": null,
       "UseUserPreferencesForValidationOptions": false
     },
-    "Condition": null
+    "Condition": %s
   }
 }`
 
@@ -77,15 +77,17 @@ type ExtractRequest struct {
 	RequestType string
 	Fields      []string
 	Identifiers map[string]string
+	Condition   map[string]string
 }
 
 func (er *ExtractRequest) toString() string {
 	fields, _ := json.Marshal(er.Fields)
 	identifiers, _ := json.Marshal(er.Identifiers)
-	return fmt.Sprintf(templ, er.RequestType, fields, identifiers)
+	condition, _ := json.Marshal(er.Condition)
+	return fmt.Sprintf(templ, er.RequestType, fields, identifiers, condition)
 }
 
-func OnDemandExtract(isinCode string) (string, string, []byte) {
+func OnDemandExtractComposite(isinCode string) (string, string, []byte) {
 	extractURL := "/RestApi/v1/Extractions/ExtractWithNotes"
 
 	er := ExtractRequest{
@@ -130,8 +132,19 @@ func OnDemandExtract(isinCode string) (string, string, []byte) {
 	return location, status, body
 }
 
-func GetAsyncResult(location string) []byte {
-	req, err := http.NewRequest("GET", location, bytes.NewBuffer([]byte("")))
+func OnDemandExtract(isinCode string, requestType string, fields []string, condition map[string]string) (string, string, []byte) {
+	extractURL := "/RestApi/v1/Extractions/ExtractWithNotes"
+
+	er := ExtractRequest{
+		RequestType: requestType,
+		Fields:      fields,
+		Identifiers: map[string]string{
+			"Identifier":     isinCode,
+			"IdentifierType": "Isin"},
+		Condition: condition}
+
+	log.Debug("request Body:", er.toString())
+	req, err := http.NewRequest("POST", baseURI+extractURL, bytes.NewBuffer([]byte(er.toString())))
 	req.Header.Set("Prefer", "respond-async; wait=5")
 	req.Header.Set("Content-Type", "application/json; odata=minimalmetadata")
 	req.Header.Set("Authorization", fmt.Sprintf("Token %s", loginResp.Token))
@@ -148,5 +161,37 @@ func GetAsyncResult(location string) []byte {
 	body, _ := ioutil.ReadAll(resp.Body)
 	log.Debug("response Body:", string(body))
 
-	return body
+	location := resp.Header.Get("Location")
+	status := resp.Header.Get("Status")
+
+	log.Debug("location: ", location)
+	log.Debug("status: ", status)
+
+	return location, status, body
+}
+
+func GetAsyncResult(location string) (string, []byte) {
+	req, err := http.NewRequest("GET", location, bytes.NewBuffer([]byte("")))
+	req.Header.Set("Prefer", "respond-async; wait=5")
+	req.Header.Set("Content-Type", "application/json; odata=minimalmetadata")
+	req.Header.Set("Authorization", fmt.Sprintf("Token %s", loginResp.Token))
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	log.Debug("response Status:", resp.Status)
+	log.Debug("response Headers:", resp.Header)
+	status := resp.Header.Get("Status")
+	log.Debug("status: ", status)
+	if status == "InProgress" {
+		return status, []byte("")
+	} else {
+		body, _ := ioutil.ReadAll(resp.Body)
+		log.Debug("response Body:", string(body))
+		return status, body
+	}
 }
