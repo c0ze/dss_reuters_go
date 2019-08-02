@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	dssUsername string
-	dssPassword string
-	baseURI     string
-	loginResp   LoginResponse
+	dataScopeUsername string
+	dataScopePassword string
+	baseURI           string
+	loginResp         LoginResponse
 )
 
 type LoginResponse struct {
@@ -24,16 +24,16 @@ type LoginResponse struct {
 }
 
 func Init() {
-	dssUsername := os.Getenv("DSS_USERNAME")
-	dssPassword := os.Getenv("DSS_PASSWORD")
+	dataScopeUsername := os.Getenv("DATA_SCOPE_USERNAME")
+	dataScopePassword := os.Getenv("DATA_SCOPE_PASSWORD")
 	baseURI = "https://hosted.datascopeapi.reuters.com"
 
-	log.Debug("credentials: ", dssUsername, dssPassword)
+	log.Debug("credentials: ", dataScopeUsername, dataScopePassword)
 
 	loginUrl := "/RestApi/v1/Authentication/RequestToken"
 	log.Debug("URL:>", loginUrl)
 
-	credentials := map[string]map[string]string{"Credentials": {"Username": dssUsername, "Password": dssPassword}}
+	credentials := map[string]map[string]string{"Credentials": {"Username": dataScopeUsername, "Password": dataScopePassword}}
 	jsonCredentials, _ := json.Marshal(credentials)
 	log.Debug("BODY:>", string(jsonCredentials))
 
