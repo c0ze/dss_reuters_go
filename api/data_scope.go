@@ -23,6 +23,11 @@ type LoginResponse struct {
 	Token   string `json:"value"`
 }
 
+// Init provides setup for interacting with Reuters/Refinitiv
+// DATA_SCOPE_USERNAME and DATA_SCOPE_PASSWORD credentials must be provided in ENV
+// Saves access token for future requests.
+//
+// TODO: Handle Tokem expiration
 func Init() {
 	dataScopeUsername := os.Getenv("DATA_SCOPE_USERNAME")
 	dataScopePassword := os.Getenv("DATA_SCOPE_PASSWORD")
@@ -87,6 +92,8 @@ func (er *ExtractRequest) toString() string {
 	return fmt.Sprintf(templ, er.RequestType, fields, identifiers, condition)
 }
 
+// This is a legacy function which extracts a pre-determined set of fields
+// as a Composite extraction. This is obsoleted by OnDemandExtract
 func OnDemandExtractComposite(isinCode string) (string, string, []byte) {
 	extractURL := "/RestApi/v1/Extractions/ExtractWithNotes"
 
@@ -132,6 +139,14 @@ func OnDemandExtractComposite(isinCode string) (string, string, []byte) {
 	return location, status, body
 }
 
+// OnDemandExtract sends an extract:on request to Reuters(Refinitiv)
+// Returns location, status and body. Location is the URL which must
+// be polled to retrieve the etraction result.
+//
+// TODO: Accept Ric as an identifier as well as ISIN
+//
+// TODO: Change function signature to accept a single ExtractRequest
+// instead of four parameters.
 func OnDemandExtract(isinCode string, requestType string, fields []string, condition map[string]string) (string, string, []byte) {
 	extractURL := "/RestApi/v1/Extractions/ExtractWithNotes"
 
@@ -170,6 +185,10 @@ func OnDemandExtract(isinCode string, requestType string, fields []string, condi
 	return location, status, body
 }
 
+// GetAsyncResult tries to retrieve the result of an extraction request
+// Returns status and body. Status is a string which is either "InProgress" or "Completed"
+//
+// TODO: Handle failed and incomplete requests
 func GetAsyncResult(location string) (string, []byte) {
 	req, err := http.NewRequest("GET", location, bytes.NewBuffer([]byte("")))
 	req.Header.Set("Prefer", "respond-async; wait=5")
