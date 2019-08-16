@@ -1,4 +1,4 @@
-package api
+package data_scope
 
 import (
 	"bytes"
@@ -27,7 +27,7 @@ type LoginResponse struct {
 // DATA_SCOPE_USERNAME and DATA_SCOPE_PASSWORD credentials must be provided in ENV
 // Saves access token for future requests.
 //
-// TODO: Handle Tokem expiration
+// TODO: Handle Token expiration
 func Init() {
 	dataScopeUsername := os.Getenv("DATA_SCOPE_USERNAME")
 	dataScopePassword := os.Getenv("DATA_SCOPE_PASSWORD")
@@ -78,85 +78,93 @@ const templ = `{
   }
 }`
 
+type RequestType int
+
+const (
+	COMPOSITE RequestType = iota
+	TECHNICAL_INDICATORS
+	TIMESERIES
+	INTRADAY_PRICING
+)
+
+type RequestStatus int
+
+const (
+	INIT RequestStatus = iota
+	IN_PROGRESS
+	COMPLETED
+	FAILED
+)
+
+type IdentifierType int
+
+const (
+	RIC IdentifierType = iota
+	ISIN
+)
+
+func (er *ExtractRequest) identifier() string {
+	var idType string
+	switch er.IdType {
+	case ISIN:
+		idType = "Isin"
+	case RIC:
+		idType = "Ric"
+	default:
+		idType = "Isin"
+	}
+	return fmt.Sprintf("{\"Identifier\": \"%s\",\"IdentifierType\": \"%s\"}", er.Identifier, idType)
+}
+
+func (er *ExtractRequest) setStatus(status string) {
+	switch status {
+	case "InProgress":
+		er.Status = IN_PROGRESS
+	case "":
+		er.Status = COMPLETED
+	default:
+		er.Status = FAILED
+	}
+}
+
 type ExtractRequest struct {
-	RequestType string
+	ReqType RequestType
 	Fields      []string
-	Identifiers map[string]string
+	IdType IdentifierType
+	Identifier string
 	Condition   map[string]string
+	Status RequestStatus
+	Location string
+	Result []byte
+}
+
+func (er *ExtractRequest) TypeString() string {
+	switch er.ReqType {
+	case COMPOSITE:
+		return "Composite"
+	case TECHNICAL_INDICATORS:
+		return "TechnicalIndicators"
+	case TIMESERIES:
+		return "TimeSeries"
+	case INTRADAY_PRICING:
+		return "IntradayPricing"
+	default:
+		return ""
+	}
 }
 
 func (er *ExtractRequest) toString() string {
 	fields, _ := json.Marshal(er.Fields)
-	identifiers, _ := json.Marshal(er.Identifiers)
 	condition, _ := json.Marshal(er.Condition)
-	return fmt.Sprintf(templ, er.RequestType, fields, identifiers, condition)
+	return fmt.Sprintf(templ, er.TypeString(), fields, er.identifier(), condition)
 }
 
-// This is a legacy function which extracts a pre-determined set of fields
-// as a Composite extraction. This is obsoleted by OnDemandExtract
-func OnDemandExtractComposite(isinCode string) (string, string, []byte) {
-	extractURL := "/RestApi/v1/Extractions/ExtractWithNotes"
-
-	er := ExtractRequest{
-		RequestType: "Composite",
-		Fields: []string{"Close Price",
-			"Contributor Code Description",
-			"Currency Code Description",
-			"Dividend Yield",
-			"Main Index",
-			"Market Capitalization",
-			"Market Capitalization - Local Currency",
-			"Percent Change - Close Price - 1 Day",
-			"Universal Close Price Date"},
-		Identifiers: map[string]string{
-			"Identifier":     isinCode,
-			"IdentifierType": "Isin"}}
-
-	log.Debug("request Body:", er.toString())
-	req, err := http.NewRequest("POST", baseURI+extractURL, bytes.NewBuffer([]byte(er.toString())))
-	req.Header.Set("Prefer", "respond-async; wait=5")
-	req.Header.Set("Content-Type", "application/json; odata=minimalmetadata")
-	req.Header.Set("Authorization", fmt.Sprintf("Token %s", loginResp.Token))
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	log.Debug("response Status:", resp.Status)
-	log.Debug("response Headers:", resp.Header)
-	body, _ := ioutil.ReadAll(resp.Body)
-	log.Debug("response Body:", string(body))
-
-	location := resp.Header.Get("Location")
-	status := resp.Header.Get("Status")
-
-	log.Debug("location: ", location)
-	log.Debug("status: ", status)
-
-	return location, status, body
-}
-
-// OnDemandExtract sends an extract:on request to Reuters(Refinitiv)
+// Extract sends an extract:on request to Reuters(Refinitiv)
 // Returns location, status and body. Location is the URL which must
 // be polled to retrieve the etraction result.
 //
-// TODO: Accept Ric as an identifier as well as ISIN
-//
-// TODO: Change function signature to accept a single ExtractRequest
-// instead of four parameters.
-func OnDemandExtract(isinCode string, requestType string, fields []string, condition map[string]string) (string, string, []byte) {
+func (er *ExtractRequest) Extract() {
 	extractURL := "/RestApi/v1/Extractions/ExtractWithNotes"
-
-	er := ExtractRequest{
-		RequestType: requestType,
-		Fields:      fields,
-		Identifiers: map[string]string{
-			"Identifier":     isinCode,
-			"IdentifierType": "Isin"},
-		Condition: condition}
 
 	log.Debug("request Body:", er.toString())
 	req, err := http.NewRequest("POST", baseURI+extractURL, bytes.NewBuffer([]byte(er.toString())))
@@ -182,15 +190,15 @@ func OnDemandExtract(isinCode string, requestType string, fields []string, condi
 	log.Debug("location: ", location)
 	log.Debug("status: ", status)
 
-	return location, status, body
+	er.setStatus(status)
+	er.Location = location
 }
 
-// GetAsyncResult tries to retrieve the result of an extraction request
-// Returns status and body. Status is a string which is either "InProgress" or "Completed"
+// CheckResult tries to retrieve the result of an extraction request
+// Result is saved in the ExtractRequest
 //
-// TODO: Handle failed and incomplete requests
-func GetAsyncResult(location string) (string, []byte) {
-	req, err := http.NewRequest("GET", location, bytes.NewBuffer([]byte("")))
+func (er *ExtractRequest) CheckResult() {
+	req, err := http.NewRequest("GET", er.Location, bytes.NewBuffer([]byte("")))
 	req.Header.Set("Prefer", "respond-async; wait=5")
 	req.Header.Set("Content-Type", "application/json; odata=minimalmetadata")
 	req.Header.Set("Authorization", fmt.Sprintf("Token %s", loginResp.Token))
@@ -206,11 +214,11 @@ func GetAsyncResult(location string) (string, []byte) {
 	log.Debug("response Headers:", resp.Header)
 	status := resp.Header.Get("Status")
 	log.Debug("status: ", status)
-	if status == "InProgress" {
-		return status, []byte("")
-	} else {
-		body, _ := ioutil.ReadAll(resp.Body)
-		log.Debug("response Body:", string(body))
-		return status, body
+	body, _ := ioutil.ReadAll(resp.Body)
+	log.Debug("response Body:", string(body))
+
+	er.setStatus(status)
+	if er.Status == COMPLETED {
+		er.Result = body
 	}
 }
